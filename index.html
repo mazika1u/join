@@ -3,82 +3,327 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Discord Invite</title>
+    <title>Discord Server Joiner</title>
     <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
         body {
-            font-family: Arial, sans-serif;
-            max-width: 500px;
-            margin: 50px auto;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
             padding: 20px;
-            background-color: #f5f5f5;
         }
+
         .container {
-            background: white;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
         }
+
+        @media (max-width: 768px) {
+            .container {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .panel {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .form-panel {
+            background: rgba(255,255,255,0.95);
+            backdrop-filter: blur(10px);
+        }
+
+        .log-panel {
+            display: flex;
+            flex-direction: column;
+        }
+
+        h1 {
+            color: #2c2c2c;
+            margin-bottom: 10px;
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        h1 i {
+            color: #5865F2;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 25px;
+            font-size: 14px;
+        }
+
         .form-group {
             margin-bottom: 20px;
         }
+
         label {
             display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+            font-size: 14px;
         }
+
         input, textarea {
             width: 100%;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            box-sizing: border-box;
+            padding: 12px 15px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.3s ease;
         }
-        button {
-            background-color: #5865F2;
+
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: #5865F2;
+            box-shadow: 0 0 0 3px rgba(88, 101, 242, 0.1);
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #5865F2, #4752C4);
             color: white;
-            padding: 12px 30px;
             border: none;
-            border-radius: 5px;
-            cursor: pointer;
+            padding: 15px 30px;
+            border-radius: 8px;
             font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
             width: 100%;
+            margin-top: 10px;
         }
-        button:hover {
-            background-color: #4752C4;
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(88, 101, 242, 0.4);
         }
-        .result {
-            margin-top: 20px;
-            padding: 10px;
-            border-radius: 5px;
-            display: none;
+
+        .btn:active {
+            transform: translateY(0);
         }
-        .success {
-            background-color: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #747474, #5a5a5a);
+            margin-top: 5px;
         }
-        .error {
-            background-color: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
+
+        .btn-secondary:hover {
+            box-shadow: 0 5px 15px rgba(116, 116, 116, 0.4);
+        }
+
+        .log-container {
+            flex: 1;
+            background: #1e1e1e;
+            border-radius: 8px;
+            padding: 15px;
+            overflow-y: auto;
+            max-height: 400px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            margin-bottom: 15px;
+        }
+
+        .log-entry {
+            margin-bottom: 8px;
+            padding: 5px 0;
+            border-bottom: 1px solid #333;
+        }
+
+        .log-time {
+            color: #888;
+            margin-right: 10px;
+        }
+
+        .log-info {
+            color: #4fc3f7;
+        }
+
+        .log-success {
+            color: #69f0ae;
+        }
+
+        .log-error {
+            color: #ff5252;
+        }
+
+        .log-warning {
+            color: #ffb74d;
+        }
+
+        .server-info {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+            border-left: 4px solid #5865F2;
+        }
+
+        .server-info h3 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 8px 15px;
+            font-size: 13px;
+        }
+
+        .info-label {
+            color: #666;
+            font-weight: 600;
+        }
+
+        .info-value {
+            color: #333;
+            word-break: break-all;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .stat-box {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            opacity: 0.9;
+        }
+
+        .token-counter {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .token-count {
+            background: #5865F2;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h2>Discordサーバー参加</h2>
-        <form id="discordForm">
-            <div class="form-group">
-                <label for="inviteLink">招待リンク:</label>
-                <input type="text" id="inviteLink" placeholder="https://discord.gg/xxxxxx" required>
+        <!-- 左側: 入力フォーム -->
+        <div class="panel form-panel">
+            <h1>🎯 Discord Server Joiner</h1>
+            <p class="subtitle">招待リンクとトークンを使用してDiscordサーバーに参加します</p>
+            
+            <form id="discordForm">
+                <div class="form-group">
+                    <label for="inviteLink">🔗 招待リンク</label>
+                    <input type="text" id="inviteLink" placeholder="https://discord.gg/xxxxxx または招待コード" required>
+                </div>
+                
+                <div class="form-group">
+                    <div class="token-counter">
+                        <label for="userTokens">🔑 ユーザートークン (複数可、1行ずつ)</label>
+                        <span class="token-count" id="tokenCount">0 tokens</span>
+                    </div>
+                    <textarea id="userTokens" placeholder="ユーザートークンを1行ずつ入力してください" required></textarea>
+                </div>
+
+                <button type="submit" class="btn">🚀 サーバーに参加</button>
+                <button type="button" id="clearLogs" class="btn btn-secondary">🗑️ ログをクリア</button>
+            </form>
+
+            <!-- サーバー情報表示エリア -->
+            <div id="serverInfo" class="server-info" style="display: none;">
+                <h3>📋 サーバー情報</h3>
+                <div class="info-grid" id="serverInfoGrid"></div>
             </div>
-            <div class="form-group">
-                <label for="userToken">ユーザートークン:</label>
-                <input type="password" id="userToken" placeholder="ユーザートークンを入力" required>
+
+            <!-- 統計情報 -->
+            <div class="stats">
+                <div class="stat-box">
+                    <div class="stat-number" id="statTotal">0</div>
+                    <div class="stat-label">総トークン</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-number" id="statSuccess">0</div>
+                    <div class="stat-label">成功</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-number" id="statFailed">0</div>
+                    <div class="stat-label">失敗</div>
+                </div>
             </div>
-            <button type="submit">サーバーに参加</button>
-        </form>
-        <div id="result" class="result"></div>
+        </div>
+
+        <!-- 右側: ログ表示 -->
+        <div class="panel log-panel">
+            <h1>📊 実行ログ</h1>
+            <p class="subtitle">処理の進行状況と結果が表示されます</p>
+            
+            <div class="log-container" id="logContainer">
+                <div class="log-entry">
+                    <span class="log-time" id="currentTime"></span>
+                    <span class="log-info">システム準備完了</span>
+                </div>
+            </div>
+
+            <div class="server-info">
+                <h3>ℹ️ 使用方法</h3>
+                <div class="info-grid">
+                    <div class="info-label">1.</div>
+                    <div class="info-value">招待リンクまたはコードを入力</div>
+                    
+                    <div class="info-label">2.</div>
+                    <div class="info-value">トークンを1行ずつ入力（複数可能）</div>
+                    
+                    <div class="info-label">3.</div>
+                    <div class="info-value">「サーバーに参加」ボタンをクリック</div>
+                    
+                    <div class="info-label">4.</div>
+                    <div class="info-value">右側のログで進捗を確認</div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script src="script.js"></script>
